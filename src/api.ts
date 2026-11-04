@@ -13,6 +13,7 @@ import { DEFAULT_MASTER_DATA, INITIAL_MOCK_STATUS, simulatePostMatch } from './m
 import { DEFAULT_MY_DECKS, DEFAULT_REGISTERED_DECKS, TIER_OPPONENT_DECKS } from './config/decks';
 import { DEFAULT_INTERACTIONS } from './config/interactions';
 import { SAMPLE_ORCUST_CARDS, buildDeckRecipeData } from './utils/deckRecipe';
+import { normalizeSeason } from './utils/format';
 
 /** localStorage キー定義 */
 export const STORAGE_KEYS = {
@@ -335,7 +336,13 @@ export function getLocalHistory(): FullMatchRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.LOCAL_HISTORY);
     if (raw) {
-      return JSON.parse(raw) as FullMatchRecord[];
+      const parsed = JSON.parse(raw) as FullMatchRecord[];
+      if (Array.isArray(parsed)) {
+        return parsed.map((r) => ({
+          ...r,
+          season: normalizeSeason(r.season, r.date),
+        }));
+      }
     }
     // まだ一度も初期化されていなければサンプル5戦を投入
     if (!localStorage.getItem(STORAGE_KEYS.SEED_INITIALIZED)) {
@@ -354,8 +361,12 @@ export function getLocalHistory(): FullMatchRecord[] {
  * ローカル対戦履歴を上書き保存（全件削除やインポート用）
  */
 export function saveLocalHistory(records: FullMatchRecord[]): void {
+  const cleaned = records.map((r) => ({
+    ...r,
+    season: normalizeSeason(r.season, r.date),
+  }));
   localStorage.setItem(STORAGE_KEYS.SEED_INITIALIZED, 'true');
-  localStorage.setItem(STORAGE_KEYS.LOCAL_HISTORY, JSON.stringify(records));
+  localStorage.setItem(STORAGE_KEYS.LOCAL_HISTORY, JSON.stringify(cleaned));
 }
 
 /**

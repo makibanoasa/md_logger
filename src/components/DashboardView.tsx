@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { FullMatchRecord, RegisteredDeck } from '../types';
+import { normalizeSeason } from '../utils/format';
 
 interface DashboardViewProps {
   records: FullMatchRecord[];
@@ -45,7 +46,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const availableSeasons = useMemo(() => {
     const set = new Set<string>([
       currentSeasonStr,
-      ...records.map((r) => r.season || r.date?.slice(0, 7)).filter(Boolean),
+      ...records.map((r) => normalizeSeason(r.season, r.date)).filter(Boolean),
     ]);
     return Array.from(set).sort().reverse();
   }, [records, currentSeasonStr]);
@@ -63,7 +64,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return records.filter((rec) => {
       if (periodMode === 'daily' && rec.date !== selectedDate) return false;
       if (periodMode === 'monthly') {
-        const recSeason = rec.season || rec.date?.slice(0, 7);
+        const recSeason = normalizeSeason(rec.season, rec.date);
         if (recSeason !== selectedSeason) return false;
       }
       if (selectedDeckFilter !== 'ALL' && rec.my_deck !== selectedDeckFilter) {

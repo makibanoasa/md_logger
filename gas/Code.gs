@@ -489,7 +489,27 @@ function readAllRecords_(logSheet) {
     const timeVal = row[2] instanceof Date
       ? Utilities.formatDate(row[2], tz, 'HH:mm:ss')
       : String(row[2] || '');
-    const seasonVal = String(row[3] || '');
+
+    let seasonVal = '';
+    if (row[3] instanceof Date) {
+      seasonVal = Utilities.formatDate(row[3], tz, 'yyyy-MM');
+    } else if (row[3]) {
+      const sRaw = String(row[3]).trim();
+      const match = sRaw.match(/^(\d{4})[-/](\d{1,2})/);
+      if (match) {
+        seasonVal = match[1] + '-' + (match[2].length === 1 ? '0' + match[2] : match[2]);
+      } else {
+        const parsed = new Date(sRaw);
+        if (!isNaN(parsed.getTime())) {
+          seasonVal = Utilities.formatDate(parsed, tz, 'yyyy-MM');
+        } else {
+          seasonVal = sRaw;
+        }
+      }
+    }
+    if (!seasonVal && dateVal) {
+      seasonVal = dateVal.slice(0, 7);
+    }
 
     const parseInteractions = function (raw) {
       if (!raw) return ['なし'];

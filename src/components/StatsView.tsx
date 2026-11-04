@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { FullMatchRecord, RegisteredDeck } from '../types';
+import { normalizeSeason } from '../utils/format';
 
 interface StatsViewProps {
   records: FullMatchRecord[];
@@ -18,14 +19,14 @@ export const StatsView: React.FC<StatsViewProps> = ({ records, registeredDecks }
 
   const availableSeasons = useMemo(() => {
     const s = new Set<string>(
-      records.map((r) => r.season || r.date?.slice(0, 7)).filter(Boolean)
+      records.map((r) => normalizeSeason(r.season, r.date)).filter(Boolean)
     );
     return Array.from(s).sort().reverse();
   }, [records]);
 
   const targetRecords = useMemo(() => {
     if (seasonFilter === 'ALL') return records;
-    return records.filter((r) => (r.season || r.date?.slice(0, 7)) === seasonFilter);
+    return records.filter((r) => normalizeSeason(r.season, r.date) === seasonFilter);
   }, [records, seasonFilter]);
 
   // ① 対面デッキ別相性・勝率ランキング
