@@ -1,0 +1,26 @@
+{
+  "name": "md-master1-logger",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "dev:clean": "powershell -Command \"Remove-Item -Recurse -Force node_modules/.vite -ErrorAction SilentlyContinue\" && vite --port 5173 --force",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 5173"
+  },
+  "dependencies": {
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "4.7.0",
+    "esbuild": "0.25.12",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "6.4.2"
+  }
+}

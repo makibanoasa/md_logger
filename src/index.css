@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/* スマートフォン操作向けのカスタム調整 */
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans CJK JP", "Yu Gothic", sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* スクロールバー非表示ユーティリティ */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
