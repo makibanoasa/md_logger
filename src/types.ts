@@ -97,6 +97,8 @@ export interface GetApiResponse {
   status: 'success' | 'error';
   master: MasterData;
   currentStatus: CurrentStatus;
+  /** スプレッドシート『対戦ログ』から読み出した過去対戦レコード全件（最新順） */
+  records?: FullMatchRecord[];
   message?: string;
 }
 

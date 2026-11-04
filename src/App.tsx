@@ -173,6 +173,11 @@ export const App: React.FC = () => {
       setStatus(data.currentStatus);
       setIsMockMode(isMock);
 
+      // スプレッドシートから読み込んだ対戦履歴をダッシュボード・統計に反映
+      if (Array.isArray(data.records)) {
+        setHistoryRecords(data.records);
+      }
+
       // localStorage にまだ保存がない場合のみ、サーバー側の前回値を反映
       if (!localStorage.getItem(STORAGE_KEYS.MY_RANK) && data.currentStatus.lastRank) {
         setMyRank(data.currentStatus.lastRank);

@@ -452,6 +452,11 @@ export async function fetchMasterAndStatus(gasUrl: string): Promise<{
   const mergeList = (front: string[], gas?: string[]) =>
     Array.from(new Set([...front, ...(gas || [])])).filter((v) => !LEGACY_NAMES.includes(v));
 
+  // スプレッドシートから対戦レコードが返却された場合はローカル履歴へ同期保存
+  if (Array.isArray(json.records)) {
+    saveLocalHistory(json.records);
+  }
+
   return {
     isMock: false,
     data: {
@@ -470,6 +475,7 @@ export async function fetchMasterAndStatus(gasUrl: string): Promise<{
         ...INITIAL_MOCK_STATUS,
         ...(json.currentStatus || {}),
       },
+      records: Array.isArray(json.records) ? json.records : undefined,
     },
   };
 }

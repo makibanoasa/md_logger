@@ -60,11 +60,13 @@ function doGet() {
     }
 
     const currentStatus = calculateCurrentStatus_(logSheet);
+    const records = readAllRecords_(logSheet);
 
     return createJsonResponse_({
       status: 'success',
       master: master,
       currentStatus: currentStatus,
+      records: records,
     });
   } catch (err) {
     return createJsonResponse_({
@@ -457,4 +459,69 @@ function calculateCurrentStatus_(logSheet) {
     stopperAlerts: stopperAlerts,
     isStopperTriggered: stopperAlerts.length > 0,
   };
+}
+
+/**
+ * 『対戦ログ』シートから全対戦レコード（最大500件）を最新順で取得して返却する
+ * スプレッドシート側の既存データがスマホのダッシュボード・統計に即時反映されます。
+ */
+function readAllRecords_(logSheet) {
+  if (!logSheet || logSheet.getLastRow() <= 1) {
+    return [];
+  }
+
+  const lastRow = logSheet.getLastRow();
+  const maxCols = Math.max(18, logSheet.getLastColumn());
+  // 最大最新500件まで取得
+  const startRow = Math.max(2, lastRow - 499);
+  const numRows = lastRow - startRow + 1;
+  const rawData = logSheet.getRange(startRow, 1, numRows, maxCols).getValues();
+  const tz = Session.getScriptTimeZone() || 'Asia/Tokyo';
+
+  const records = [];
+  // 最新（下の行）から逆順に配列へ追加
+  for (let i = rawData.length - 1; i >= 0; i--) {
+    const row = rawData[i];
+    const matchId = Number(row[0]) || (startRow + i - 1);
+    const dateVal = row[1] instanceof Date
+      ? Utilities.formatDate(row[1], tz, 'yyyy-MM-dd')
+      : String(row[1] || '');
+    const timeVal = row[2] instanceof Date
+      ? Utilities.formatDate(row[2], tz, 'HH:mm:ss')
+      : String(row[2] || '');
+    const seasonVal = String(row[3] || '');
+
+    const parseInteractions = function (raw) {
+      if (!raw) return ['なし'];
+      const str = String(raw).trim();
+      if (!str || str === 'なし') return ['なし'];
+      return str.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    };
+
+    records.push({
+      match_id: matchId,
+      date: dateVal,
+      time: timeVal,
+      season: seasonVal,
+      my_rank: String(row[4] || 'ダイヤ5'),
+      my_deck: String(row[5] || ''),
+      turn: String(row[6] || ''),
+      result: String(row[7] || ''),
+      play_decision: String(row[8] || '通常決着'),
+      opp_deck: String(row[9] || '不明'),
+      has_starter: String(row[10] || '○'),
+      counter_action: String(row[11] || '無風'),
+      opp_interactions: parseInteractions(row[12]),
+      my_interactions: parseInteractions(row[13]),
+      game_factor: String(row[14] || ''),
+      stress_level: Number(row[15]) || 2,
+      memo: String(row[16] || ''),
+      ai_comment: String(row[17] || ''),
+      coin: String(row[18] || ''),
+      my_deck_id: String(row[19] || ''),
+      my_deck_recipe: String(row[20] || ''),
+    });
+  }
+
+  return records;
 }
