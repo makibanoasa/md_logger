@@ -545,3 +545,128 @@ function readAllRecords_(logSheet) {
 
   return records;
 }
+
+/**
+ * スプレッドシートを開いた時に自動実行：カスタムメニューを追加
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🏆 MDロガー')
+    .addItem('✨ 初期シート自動生成・セットアップ', 'setupMasterDuelLogger')
+    .addToUi();
+}
+
+/**
+ * ワンクリック初期セットアップ関数
+ * 新規の白紙スプレッドシートでも、この関数を実行するだけで
+ * 『対戦ログ』『マスタ設定』『デッキレシピ』の3シートと全設定が自動生成されます。
+ */
+function setupMasterDuelLogger() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. 『対戦ログ』シートのセットアップ
+  let logSheet = ss.getSheetByName(SHEET_LOG);
+  if (!logSheet) {
+    logSheet = ss.insertSheet(SHEET_LOG, 0);
+  }
+  const logHeaders = [
+    '試合No',
+    '日付',
+    '時刻',
+    'シーズン',
+    '現在ランク',
+    '使用デッキ',
+    '先攻/後攻',
+    '勝敗',
+    '判断区分',
+    '相手デッキ',
+    '自デッキ初動有無',
+    'カウンター結果',
+    '被弾妨害(誘発➔対象)',
+    '自軍妨害(使用札➔対象)',
+    '勝敗主因タグ',
+    'ストレス度',
+    '一言メモ',
+    'AI伴走コメント',
+    'コイントス',
+    'デッキID',
+    '採用カード一覧(AI分析用)',
+  ];
+  if (logSheet.getLastRow() === 0) {
+    logSheet.appendRow(logHeaders);
+    const headerRange = logSheet.getRange(1, 1, 1, logHeaders.length);
+    headerRange.setBackground('#1e293b').setFontColor('#f8fafc').setFontWeight('bold');
+    logSheet.setFrozenRows(1);
+  } else {
+    ensureExtendedLogHeaders_(logSheet);
+  }
+
+  // 2. 『マスタ設定』シートのセットアップ
+  let masterSheet = ss.getSheetByName(SHEET_MASTER);
+  if (!masterSheet) {
+    masterSheet = ss.insertSheet(SHEET_MASTER, 1);
+  }
+  if (masterSheet.getLastRow() === 0) {
+    const masterData = [
+      ['自軍デッキ', '相手デッキ', '誘発・汎用札', '対象プリセット', '判断区分', 'カウンター結果', '勝敗主因タグ'],
+      ['幻影騎士団', 'エルフェンノーツ', '増G', '初動', '通常決着', '無風', '制圧完封'],
+      ['オルフェゴール', 'エルフェンノーツ・キラーチューン', 'フワロス', '増G', '早期見切り(即サレ)', '対抗札貫通', '誘発刺さり'],
+      ['シャドール', 'ドラゴンテイル', 'うらら', 'フワロス', '相手即サレ', 'ケア展開で回避', '妥協守り切り'],
+      ['召喚獣', 'アルトメギア', 'ドロバ', 'EX中継', '粘りプレイ(捲り挑戦)', '手数貫通', '捲り成功'],
+      ['磁石の戦士', '閃刀姫', '抹殺の指名者', 'サーチ効果', '', '妥協盤面移行', '時間切れ・運勝ち'],
+      ['', '烙印', '墓穴の指名者', '墓地効果', '', '停止', '初動事故'],
+      ['', 'M∀LICE', '無限泡影', '制圧モンスター', '', '', 'Gフワロス停止'],
+      ['', 'オルフェゴール', 'ヴェーラー', 'バック・罠', '', '', '誘発被弾停止'],
+      ['', 'ライゼオル巳剣', '霊王の波動', '省略(対象指定なし)', '', '', 'まくり札直撃'],
+      ['', '天盃龍', '聖王の粉砕', '', '', '', '手数捲られ'],
+      ['', 'ラビュリンス', 'ニビル', '', '', '', 'プレミ'],
+      ['', 'ティアラメンツ', 'アトラクター', '', '', '', ''],
+      ['', '青眼', '超融合', '', '', '', ''],
+      ['', '不明', 'なし', '', '', '', ''],
+    ];
+
+    masterSheet.getRange(1, 1, masterData.length, masterData[0].length).setValues(masterData);
+    masterSheet.getRange(1, 1, 1, masterData[0].length).setBackground('#0f172a').setFontColor('#38bdf8').setFontWeight('bold');
+    masterSheet.setFrozenRows(1);
+  }
+
+  // 3. 『デッキレシピ』シートのセットアップ
+  let deckSheet = ss.getSheetByName(SHEET_DECK_RECIPES);
+  if (!deckSheet) {
+    deckSheet = ss.insertSheet(SHEET_DECK_RECIPES, 2);
+  }
+  if (deckSheet.getLastRow() === 0) {
+    const deckHeaders = [
+      'デッキID',
+      'デッキ名',
+      'バージョンメモ',
+      '更新日',
+      'メイン枚数',
+      'EX枚数',
+      'モンスター一覧',
+      '魔法一覧',
+      '罠一覧',
+      'EX一覧',
+      'AI分析用全採用カードテキスト',
+    ];
+    deckSheet.appendRow(deckHeaders);
+    deckSheet.getRange(1, 1, 1, deckHeaders.length).setBackground('#1e293b').setFontColor('#34d399').setFontWeight('bold');
+    deckSheet.setFrozenRows(1);
+  }
+
+  // デフォルトの余計な「シート1」があれば削除
+  const defaultSheet = ss.getSheetByName('シート1') || ss.getSheetByName('Sheet1');
+  if (defaultSheet && ss.getSheets().length > 1) {
+    try {
+      ss.deleteSheet(defaultSheet);
+    } catch (e) {
+      // 無視
+    }
+  }
+
+  try {
+    SpreadsheetApp.getUi().alert('✅ セットアップ完了！\n『対戦ログ』『マスタ設定』『デッキレシピ』シートが正常に作成されました。\n「デプロイ」➔「新しいデプロイ」からWebアプリとして公開してください。');
+  } catch (e) {
+    // UI非対応環境でのフォールバック
+  }
+}
