@@ -1,0 +1,19 @@
+{
+  "name": "MD マスター1到達管理ロガー",
+  "short_name": "MDロガー",
+  "description": "遊戯王マスターデュエル 1戦ごとの戦績・誘発応酬・初動・メンタルを高速記録するM1到達管理アプリ",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
