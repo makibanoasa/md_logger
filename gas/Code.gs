@@ -2,7 +2,7 @@
  * 遊戯王マスターデュエル マスター1到達管理DB バックエンド GAS スクリプト (gas/Code.gs)
  *
  * 【案C 完全対応版】
- * 1. 遊戯王ニューロン出力のデッキリストファイル（JPG画像またはPDF）を Gemini 2.5 Flash Vision でOCR解析し、
+ * 1. 遊戯王ニューロン出力のデッキリストファイル（JPG画像またはPDF）を Gemini 3.8 Flash Vision でOCR解析し、
  *    モンスター・魔法・罠・EXの採用カード名＆枚数を100%構造化データとして返却 (action: 'parse_deck_image')
  * 2. スプレッドシート内に別シート『デッキレシピ』を自動生成・更新し、
  *    デッキIDごとの採用カード一覧をデータベース化 (action: 'sync_decks')
@@ -14,6 +14,7 @@
 const SHEET_LOG = '対戦ログ';
 const SHEET_MASTER = 'マスタ設定';
 const SHEET_DECK_RECIPES = 'デッキレシピ';
+const GEMINI_MODEL = 'gemini-3.8-flash';
 
 /**
  * Gemini API キーを取得（スクリプトプロパティ `GEMINI_API_KEY` に設定してください）
@@ -218,7 +219,7 @@ function parseNeuronDeckImageWithGemini_(imageBase64, mimeType) {
   }
 
   const url =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' +
+    'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' +
     encodeURIComponent(apiKey);
 
   const prompt = [
@@ -377,7 +378,7 @@ function generateMatchAiComment_(payload) {
 
   try {
     const url =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' +
+      'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' +
       encodeURIComponent(apiKey);
 
     const prompt = [
