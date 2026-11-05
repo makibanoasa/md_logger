@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   MasterData,
   CurrentStatus,
@@ -14,8 +14,10 @@ import {
   RANK_LIST,
   WIN_FACTORS,
   LOSE_FACTORS,
+  GO_SECOND_LOSE_FACTORS,
   STRESS_LEVELS,
   COUNTER_ACTION_HINTS,
+  GAME_FACTOR_HINTS,
 } from './mockData';
 import {
   DEFAULT_MY_DECKS,
@@ -402,21 +404,47 @@ export const App: React.FC = () => {
     (f) => !WIN_FACTORS.includes(f) && !LOSE_FACTORS.includes(f)
   );
 
+  // 後攻選択時は後手特有の負け要因（相手理想展開、相手標準展開、相手妥協展開）を先頭に配置
+  const sortedLoseFactors = useMemo<string[]>(() => {
+    if (turn === '後攻') {
+      return [
+        ...loseFactorList.filter((f) => GO_SECOND_LOSE_FACTORS.includes(f)),
+        ...loseFactorList.filter((f) => !GO_SECOND_LOSE_FACTORS.includes(f)),
+      ];
+    }
+    return [
+      ...loseFactorList.filter((f) => !GO_SECOND_LOSE_FACTORS.includes(f)),
+      ...loseFactorList.filter((f) => GO_SECOND_LOSE_FACTORS.includes(f)),
+    ];
+  }, [loseFactorList, turn]);
+
+  interface FactorGroup {
+    label: string;
+    items: string[];
+    isPriority: boolean;
+    tone: 'emerald' | 'rose';
+  }
+
   // Win選択時は勝ち要因を先頭に、Lose選択時は負け要因を先頭に配置
-  const orderedFactorGroups =
+  const orderedFactorGroups: FactorGroup[] =
     result === 'Lose'
       ? [
-          { label: '🔻 負け主因（優先）', items: loseFactorList, isPriority: true, tone: 'rose' },
+          {
+            label: turn === '後攻' ? '🔻 後手負け主因（優先）' : '🔻 負け主因（優先）',
+            items: sortedLoseFactors,
+            isPriority: true,
+            tone: 'rose',
+          },
           { label: '🔹 勝ち主因', items: winFactorList, isPriority: false, tone: 'emerald' },
         ]
       : result === 'Win'
       ? [
           { label: '🌟 勝ち主因（優先）', items: winFactorList, isPriority: true, tone: 'emerald' },
-          { label: '🔻 負け主因', items: loseFactorList, isPriority: false, tone: 'rose' },
+          { label: '🔻 負け主因', items: sortedLoseFactors, isPriority: false, tone: 'rose' },
         ]
       : [
           { label: '🌟 勝ち主因', items: winFactorList, isPriority: true, tone: 'emerald' },
-          { label: '🔻 負け主因', items: loseFactorList, isPriority: true, tone: 'rose' },
+          { label: '🔻 負け主因', items: sortedLoseFactors, isPriority: true, tone: 'rose' },
         ];
 
   return (
@@ -1156,6 +1184,14 @@ export const App: React.FC = () => {
                       {factor}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* 選択中の勝敗主因の分析ヒント表示 */}
+              {GAME_FACTOR_HINTS[gameFactor] && (
+                <div className="rounded-xl bg-slate-950/90 border border-slate-800 p-2.5 text-[11px] text-slate-300 leading-relaxed animate-fadeIn">
+                  <span className="font-bold text-amber-300 mr-1.5">💡 {gameFactor}:</span>
+                  <span>{GAME_FACTOR_HINTS[gameFactor]}</span>
                 </div>
               )}
             </div>
