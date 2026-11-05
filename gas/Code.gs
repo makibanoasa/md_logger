@@ -14,8 +14,8 @@
 const SHEET_LOG = '対戦ログ';
 const SHEET_MASTER = 'マスタ設定';
 const SHEET_DECK_RECIPES = 'デッキレシピ';
-/** Google AI Studio 無料枠の優先モデル＆混雑時フォールバックモデル一覧 */
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.0-flash'];
+/** Google AI Studio 無料枠の現行モデル一覧（3.8-flash ＆ 3.6-flash） */
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash'];
 
 /**
  * Gemini API キーを取得（スクリプトプロパティ `GEMINI_API_KEY` に設定してください）
@@ -207,7 +207,7 @@ function ensureExtendedLogHeaders_(logSheet) {
 }
 
 /**
- * Google Gemini API 呼び出し汎用ヘルパー（503混雑時・429クォータ時の自動指数バックオフ＆モデルフォールバック対応）
+ * Google Gemini API 呼び出し汎用ヘルパー（503混雑時・429クォータ時の自動指数バックオフ＆現行モデルフォールバック対応）
  */
 function callGeminiApiWithRetry_(apiKey, requestBody) {
   let lastError = null;
@@ -218,10 +218,11 @@ function callGeminiApiWithRetry_(apiKey, requestBody) {
       'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' +
       encodeURIComponent(apiKey);
 
-    // 各モデルで最大2回（初回＋1.5秒待機後リトライ）試行
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) {
-        Utilities.sleep(1500 * attempt); // 混雑時の一時待機
+    // 各モデルで最大3回（初回 ➔ 2秒待機 ➔ 3秒待機）試行
+    const retryDelays = [0, 2000, 3000];
+    for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+      if (retryDelays[attempt] > 0) {
+        Utilities.sleep(retryDelays[attempt]); // 混雑時の一時待機
       }
 
       const res = UrlFetchApp.fetch(url, {
@@ -250,11 +251,16 @@ function callGeminiApiWithRetry_(apiKey, requestBody) {
       const errMsg = json.error && json.error.message ? json.error.message : resText;
       lastError = new Error('Gemini APIエラー [' + model + '] (HTTP ' + statusCode + '): ' + errMsg);
 
-      // 503 (High Demand / Overloaded) または 429 の場合のみリトライ・次モデルへ移行
+      // 404 (提供終了) の場合は待たずに即座に次のモデルへフォールバック
+      if (statusCode === 404) {
+        break;
+      }
+
+      // 503 (High Demand / Overloaded) または 429 の場合はリトライ継続
       if (statusCode === 503 || statusCode === 429) {
         continue;
       } else {
-        // 400 や 403 などの致命的エラーはリトライせず即時スロー
+        // 400 (Bad Request) や 403 (Forbidden) などの致命的エラーはリトライせずスロー
         throw lastError;
       }
     }
