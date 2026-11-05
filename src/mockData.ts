@@ -234,12 +234,17 @@ export function simulatePostMatch(
   const isHighStress = payload.stress_level >= 4;
   const consecutiveHighStress = isHighStress ? prevStatus.consecutiveHighStress + 1 : 0;
 
-  // 勝ち越し数の計算（マスター1到達の場合は0、それ以外は勝敗で±1）
-  let remainingNetWins = prevStatus.remainingNetWins + (isWin ? -1 : 1);
+  // 勝ち越し数の計算（マスターデュエル仕様: 各ランク帯の底では借金が増えないため、初期目標40を超えて増えることはない）
+  const targetNetWins = 40;
+  let remainingNetWins = prevStatus.remainingNetWins;
+  if (isWin) {
+    remainingNetWins = Math.max(0, remainingNetWins - 1);
+  } else {
+    // ダイヤ5などの底では借金が増えない（上限40でストップ）
+    remainingNetWins = Math.min(targetNetWins, remainingNetWins + 1);
+  }
   if (payload.my_rank === 'マスター1') {
     remainingNetWins = 0;
-  } else if (remainingNetWins < 1) {
-    remainingNetWins = 1;
   }
 
   // ストッパー警告判定（3連敗以上 または 高ストレス4〜5が2連続以上 または ストレス5限界）

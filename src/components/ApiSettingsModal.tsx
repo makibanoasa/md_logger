@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MOCK_STATUS } from '../mockData';
-import { saveLocalMockStatus, STORAGE_KEYS } from '../api';
+import {
+  saveLocalMockStatus,
+  STORAGE_KEYS,
+  getSavedGeminiApiKey,
+  saveGeminiApiKey,
+} from '../api';
 
 interface ApiSettingsModalProps {
   isOpen: boolean;
@@ -11,8 +16,9 @@ interface ApiSettingsModalProps {
 }
 
 /**
- * ⚙️ API URL設定モーダルコンポーネント
- * SPEC.md 4.1節: GASのWebアプリURLをブラウザの localStorage に保存・変更できるようにする
+ * ⚙️ API設定モーダルコンポーネント
+ * 1. GAS WebアプリURL（スプレッドシート連携用）
+ * 2. Google Gemini APIキー（ニューロン画像/PDFのAI自動読み取り用）
  */
 export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
   isOpen,
@@ -22,6 +28,7 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
   onResetMockData,
 }) => {
   const [inputUrl, setInputUrl] = useState<string>(currentUrl);
+  const [inputGeminiKey, setInputGeminiKey] = useState<string>('');
   const [isTesting, setIsTesting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error' | 'info';
@@ -31,6 +38,7 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setInputUrl(currentUrl);
+      setInputGeminiKey(getSavedGeminiApiKey());
       setStatusMessage(null);
     }
   }, [isOpen, currentUrl]);
@@ -40,14 +48,16 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsTesting(true);
-    setStatusMessage({ type: 'info', text: '設定を保存してデータを同期しています...' });
+    setStatusMessage({ type: 'info', text: '設定を保存しています...' });
     try {
+      // Gemini API キーの保存
+      saveGeminiApiKey(inputGeminiKey.trim());
+
+      // GAS URL の保存と疎通
       await onSaveUrl(inputUrl.trim());
       setStatusMessage({
         type: 'success',
-        text: inputUrl.trim()
-          ? '✅ GAS WebアプリURLを保存し、マスタ＆ステータスを取得しました！'
-          : '✅ プレビューモード（内蔵モックデータ）に切り替えました。',
+        text: '✅ 設定を保存しました！ニューロンJPG/PDFのAI読み取りが利用可能です。',
       });
       setTimeout(() => {
         onClose();
@@ -56,7 +66,7 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
       const msg = err instanceof Error ? err.message : '通信エラーが発生しました';
       setStatusMessage({
         type: 'error',
-        text: `⚠️ URLは保存されましたがGET通信に失敗しました: ${msg}`,
+        text: `⚠️ 設定は保存されましたがGET通信で警告がありました: ${msg}`,
       });
     } finally {
       setIsTesting(false);
@@ -70,7 +80,7 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
         <div className="flex items-center justify-between px-4 py-3.5 bg-slate-950 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <span className="text-lg">⚙️</span>
-            <h2 className="text-sm font-bold text-white">GAS API URL設定</h2>
+            <h2 className="text-sm font-bold text-white">API・外部連携設定</h2>
           </div>
           <button
             type="button"
@@ -82,10 +92,41 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
         </div>
 
         {/* モーダル本文 */}
-        <form onSubmit={handleSave} className="p-4 space-y-4">
+        <form onSubmit={handleSave} className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
+          {/* 1. Google Gemini APIキー（ニューロンJPG/PDF AI自動解析用） */}
+          <div className="rounded-xl bg-slate-950/90 border border-sky-500/40 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
+                <span>🤖</span>
+                <span>Google Gemini APIキー (無料)</span>
+              </label>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-amber-300 hover:underline flex items-center gap-0.5 font-bold"
+              >
+                <span>無料キー取得</span>
+                <span>↗</span>
+              </a>
+            </div>
+            <input
+              type="password"
+              value={inputGeminiKey}
+              onChange={(e) => setInputGeminiKey(e.target.value)}
+              placeholder="AIzaSy... (Google AI Studioで取得したAPIキー)"
+              className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-400 font-mono"
+            />
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              ※ ここにキーを登録すると、遊戯王ニューロンのデッキリスト（JPG画像またはPDF）をGemini 2.5 Flash Visionが直接解析し、100%本物のカード名と枚数を自動構造化します。
+            </p>
+          </div>
+
+          {/* 2. GAS WebアプリURL（スプレッドシート連携用） */}
           <div>
-            <label className="block text-xs font-bold text-slate-200 mb-1.5">
-              Google Apps Script WebアプリURL (`exec`)
+            <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center gap-1.5">
+              <span>📊</span>
+              <span>Google Apps Script WebアプリURL (`exec`)</span>
             </label>
             <input
               type="url"
@@ -101,13 +142,13 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
 
           {/* CORS配慮に関する技術仕様インフォメーション */}
           <div className="rounded-xl bg-slate-950/90 border border-slate-800 p-3 text-[11px] text-slate-400 space-y-1">
-            <div className="font-bold text-amber-400">📡 CORS回避仕様（自動適用済み）</div>
+            <div className="font-bold text-amber-400">📡 通信仕様（自動適用済み）</div>
             <p>
-              POST送信時はプリフライト（`OPTIONS`）エラーを回避するため、自動的に{' '}
+              Gemini Vision解析はブラウザから直接APIへ安全に送信されます。スプレッドシートへの対戦記録POST時は{' '}
               <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">
                 Content-Type: text/plain;charset=utf-8
               </code>{' '}
-              でJSONペイロードを送信します。
+              でCORSプリフライトを自動回避します。
             </p>
           </div>
 

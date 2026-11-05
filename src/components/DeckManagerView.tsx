@@ -12,6 +12,7 @@ import {
   parseMultiLineRecipeText,
   processUploadedDeckFile,
   extractDeckInteractionsForBuilder,
+  SAMPLE_ORCUST_CARDS,
 } from '../utils/deckRecipe';
 import { parseDeckImageWithAI, syncDecksToSpreadsheet } from '../api';
 
@@ -84,7 +85,7 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
 
   const showToast = (msg: string) => {
     setStatusToast(msg);
-    setTimeout(() => setStatusToast(null), 4000);
+    setTimeout(() => setStatusToast(null), 6000);
   };
 
   /**
@@ -130,23 +131,17 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
       setEditPreviewImage(previewDataUrl || '');
       setEditPreviewFileName(isPdf ? fileName : '');
 
-      const { recipe, isMock } = await parseDeckImageWithAI(gasUrl, ocrBase64, mimeType);
+      const { recipe } = await parseDeckImageWithAI(gasUrl, ocrBase64, mimeType);
       setEditCards(recipe.cards);
       setBulkText(formatMultiLineRecipeText(recipe.cards));
 
       const fileTypeLabel = isPdf ? 'PDF' : 'JPG';
-      if (isMock) {
-        showToast(
-          `📄 ニューロン${fileTypeLabel}から メイン${recipe.mainCount}枚 / EX${recipe.extraCount}枚 を抽出しました！（枚数の微調整も可能です）`
-        );
-      } else {
-        showToast(
-          `✨ Gemini Visionで${fileTypeLabel}を解析完了！メイン${recipe.mainCount}枚 / EX${recipe.extraCount}枚を構造化しました`
-        );
-      }
+      showToast(
+        `✨ Gemini Visionで${fileTypeLabel}を解析完了！メイン${recipe.mainCount}枚 / EX${recipe.extraCount}枚を構造化しました`
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'ファイル解析エラー';
-      showToast(`⚠️ ファイルの読み取りに失敗しました: ${msg}`);
+      showToast(`⚠️ ${msg}`);
     } finally {
       setIsParsingImage(false);
       e.target.value = '';
@@ -404,6 +399,21 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
                 )}
               </span>
             </label>
+
+            <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400">
+              <span>※「⚙️ API設定」に無料のGemini APIキーを登録すると解析が有効化されます</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditCards(SAMPLE_ORCUST_CARDS);
+                  setBulkText(formatMultiLineRecipeText(SAMPLE_ORCUST_CARDS));
+                  showToast('💡 サンプルデッキ（オルフェゴール40枚）をセットしました');
+                }}
+                className="text-amber-400 hover:underline shrink-0 font-bold"
+              >
+                サンプル40枚を試す
+              </button>
+            </div>
           </div>
 
           {/* 採用カード編集エリア（ボタン微調整モード vs テキスト一括編集モード） */}

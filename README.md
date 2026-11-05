@@ -73,8 +73,12 @@ GitHub Pages（画面）は共通ですが、**データは各自のGoogle ス�
 
 ### STEP 5: スマホアプリの「API設定」に貼るだけ！
 1. スマホで **https://makibanoasa.github.io/md_logger/** を開きます。
-2. 右上の **「⚙️ API設定」** をタップし、先ほどコピーしたURLを貼り付けて **「保存して反映」** を押します。
-3. 上部に緑色で **`GAS連携中`** と表示されれば連携完了です！
+2. 右上の **「⚙️ API設定」** をタップします。
+3. コピーした **GAS WebアプリURL** を貼り付けます。
+4. **【重要】ニューロンのデッキリスト（JPG/PDF）をAIで自動読み取りする場合**:
+   - [Google AI Studio (無料)](https://aistudio.google.com/app/apikey) で「Create API Key」を押し、発行されたAPIキーを **「Google Gemini APIキー (無料)」** 欄に貼り付けます。
+   - これにより、ブラウザから直接 Gemini 2.5 Flash Vision が呼び出され、どんなデッキレシピでも100%確実にカード名と枚数を自動構造化します。
+5. **「保存して反映」** を押せば完了です！上部に **`GAS連携中`** と表示されます。
 
 ---
 

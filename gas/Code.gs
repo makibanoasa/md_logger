@@ -84,9 +84,13 @@ function doPost(e) {
     const rawBody = e && e.postData && e.postData.contents ? e.postData.contents : '{}';
     const payload = JSON.parse(rawBody);
 
-    // ① ニューロン出力JPG画像のAI読み取りリクエスト
+    // ① ニューロン出力JPG/PDF画像のAI読み取りリクエスト
     if (payload.action === 'parse_deck_image') {
-      const cards = parseNeuronDeckImageWithGemini_(payload.imageBase64, payload.mimeType);
+      const cards = parseNeuronDeckImageWithGemini_(
+        payload.imageBase64,
+        payload.mimeType,
+        payload.geminiApiKey
+      );
       return createJsonResponse_({
         status: 'success',
         cards: cards,
@@ -208,10 +212,10 @@ function ensureExtendedLogHeaders_(logSheet) {
  * 遊戯王ニューロン出力のデッキリストJPG画像を Gemini 2.5 Flash Vision で解析し、
  * [{ name: "エフェクト・ヴェーラー", count: 3, category: "monster" }, ...] を返す
  */
-function parseNeuronDeckImageWithGemini_(imageBase64, mimeType) {
-  const apiKey = getGeminiApiKey_();
+function parseNeuronDeckImageWithGemini_(imageBase64, mimeType, apiKeyParam) {
+  const apiKey = apiKeyParam || getGeminiApiKey_();
   if (!apiKey) {
-    throw new Error('GASのスクリプトプロパティに GEMINI_API_KEY が設定されていません');
+    throw new Error('Gemini APIキーが設定されていません。アプリの「⚙️ API設定」またはGASスクリプトプロパティに GEMINI_API_KEY を設定してください');
   }
 
   const url =
@@ -411,7 +415,10 @@ function calculateCurrentStatus_(logSheet) {
       : String(rows[i][1]);
     const res = String(rows[i][7]);
     if (res === 'Win') netWins++;
-    if (res === 'Lose') netWins--;
+    if (res === 'Lose') {
+      // マスターデュエル仕様: 各ランク帯の底（ダイヤ5等）では降格・借金がないため、netWinsは0未満にならない
+      netWins = Math.max(0, netWins - 1);
+    }
 
     if (rDate === todayStr) {
       todayMatches++;
