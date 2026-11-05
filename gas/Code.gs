@@ -14,7 +14,8 @@
 const SHEET_LOG = '対戦ログ';
 const SHEET_MASTER = 'マスタ設定';
 const SHEET_DECK_RECIPES = 'デッキレシピ';
-const GEMINI_MODEL = 'gemini-3.8-flash';
+/** Google AI Studio 無料枠の優先モデル＆混雑時フォールバックモデル一覧 */
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.0-flash'];
 
 /**
  * Gemini API キーを取得（スクリプトプロパティ `GEMINI_API_KEY` に設定してください）
@@ -206,7 +207,64 @@ function ensureExtendedLogHeaders_(logSheet) {
 }
 
 /**
- * 遊戯王ニューロン出力のデッキリスト（画像またはPDF）を Gemini 2.5 Flash Vision で解析し、
+ * Google Gemini API 呼び出し汎用ヘルパー（503混雑時・429クォータ時の自動指数バックオフ＆モデルフォールバック対応）
+ */
+function callGeminiApiWithRetry_(apiKey, requestBody) {
+  let lastError = null;
+
+  for (let m = 0; m < GEMINI_MODELS.length; m++) {
+    const model = GEMINI_MODELS[m];
+    const url =
+      'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' +
+      encodeURIComponent(apiKey);
+
+    // 各モデルで最大2回（初回＋1.5秒待機後リトライ）試行
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        Utilities.sleep(1500 * attempt); // 混雑時の一時待機
+      }
+
+      const res = UrlFetchApp.fetch(url, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(requestBody),
+        muteHttpExceptions: true,
+      });
+
+      const statusCode = res.getResponseCode();
+      const resText = res.getContentText();
+
+      let json = null;
+      try {
+        json = JSON.parse(resText);
+      } catch (e) {
+        lastError = new Error('Gemini APIレスポンス解析エラー (HTTP ' + statusCode + ')');
+        continue;
+      }
+
+      // 成功時
+      if (statusCode === 200 && !json.error) {
+        return json;
+      }
+
+      const errMsg = json.error && json.error.message ? json.error.message : resText;
+      lastError = new Error('Gemini APIエラー [' + model + '] (HTTP ' + statusCode + '): ' + errMsg);
+
+      // 503 (High Demand / Overloaded) または 429 の場合のみリトライ・次モデルへ移行
+      if (statusCode === 503 || statusCode === 429) {
+        continue;
+      } else {
+        // 400 や 403 などの致命的エラーはリトライせず即時スロー
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError || new Error('Gemini API呼び出しがすべての候補モデルで混雑のため失敗しました。少し待ってからお試しください。');
+}
+
+/**
+ * 遊戯王ニューロン出力のデッキリスト（画像またはPDF）を Gemini Vision で解析し、
  * [{ name: "エフェクト・ヴェーラー", count: 3, category: "monster" }, ...] を返す
  * 
  * セキュリティ方針:
@@ -217,10 +275,6 @@ function parseNeuronDeckImageWithGemini_(imageBase64, mimeType) {
   if (!apiKey) {
     throw new Error('GASのスクリプトプロパティに GEMINI_API_KEY が設定されていません。Apps Scriptの設定からAPIキーを登録してください');
   }
-
-  const url =
-    'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' +
-    encodeURIComponent(apiKey);
 
   const prompt = [
     '添付された遊戯王ニューロン（公式カードデータベース）のデッキレシピシート（画像またはPDF）から、',
@@ -249,27 +303,7 @@ function parseNeuronDeckImageWithGemini_(imageBase64, mimeType) {
     },
   };
 
-  const res = UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(requestBody),
-    muteHttpExceptions: true,
-  });
-
-  const statusCode = res.getResponseCode();
-  const resText = res.getContentText();
-
-  let json;
-  try {
-    json = JSON.parse(resText);
-  } catch (e) {
-    throw new Error('Gemini APIレスポンス解析エラー (HTTP ' + statusCode + ')');
-  }
-
-  if (statusCode !== 200 || json.error) {
-    const errMsg = json.error && json.error.message ? json.error.message : resText;
-    throw new Error('Gemini APIエラー (HTTP ' + statusCode + '): ' + errMsg);
-  }
+  const json = callGeminiApiWithRetry_(apiKey, requestBody);
 
   // candidates の parts から最終テキストを抽出（Thinkingパートが存在する場合を考慮）
   let rawText = '';
@@ -377,30 +411,9 @@ function generateMatchAiComment_(payload) {
   }
 
   try {
-    const url =
-      'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' +
-      encodeURIComponent(apiKey);
-
-    const prompt = [
-      'あなたは遊戯王マスターデュエルのランクマッチ伴走AIコーチです。100文字以内で簡潔・温かいフィードバックを返してください。',
-      '使用デッキ: ' + payload.my_deck + (payload.my_deck_recipe ? ' (' + payload.my_deck_recipe + ')' : ''),
-      '相手デッキ: ' + payload.opp_deck,
-      'コイン/先後/勝敗: コイン' + (payload.coin || '不明') + ' / ' + payload.turn + ' / ' + payload.result,
-      '判断区分: ' + payload.play_decision + ' / 初動: ' + payload.has_starter + ' / カウンター結果: ' + payload.counter_action,
-      '被弾妨害: ' + JSON.stringify(payload.opp_interactions) + ' / 自軍妨害: ' + JSON.stringify(payload.my_interactions),
-      '勝敗主因: ' + payload.game_factor + ' / ストレスLv: ' + payload.stress_level + ' / メモ: ' + (payload.memo || 'なし'),
-    ].join('\n');
-
-    const res = UrlFetchApp.fetch(url, {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-      }),
-      muteHttpExceptions: true,
+    const json = callGeminiApiWithRetry_(apiKey, {
+      contents: [{ parts: [{ text: prompt }] }],
     });
-
-    const json = JSON.parse(res.getContentText());
     return (
       (json.candidates &&
         json.candidates[0] &&
