@@ -224,12 +224,15 @@ export const App: React.FC = () => {
   /**
    * 判断区分タップ時の処理
    * SPEC.md 4.3節: 「[早期見切り(即サレ)] をタップした場合、自動的に勝敗を Lose にセットする」
-   * 追加仕様: 「相手即サレ」をタップした場合は自動的に Win にセットする
+   * 追加仕様:
+   * - 「早期見切り(即サレ)」タップ時: カウンター結果を自動的に「未展開(即サレ)」にセット
+   * - 「相手即サレ」タップ時: 自動的に Win にセット
    */
   const handleSelectPlayDecision = (decision: string) => {
     setPlayDecision(decision);
     if (decision === '早期見切り(即サレ)') {
       setResult('Lose');
+      setCounterAction('未展開(即サレ)');
       // もし現在勝ち主因タグが選ばれていたらクリア
       if (WIN_FACTORS.includes(gameFactor)) {
         setGameFactor('');
@@ -238,6 +241,21 @@ export const App: React.FC = () => {
       setResult('Win');
       // もし現在負け主因タグが選ばれていたらクリア
       if (LOSE_FACTORS.includes(gameFactor)) {
+        setGameFactor('');
+      }
+    }
+  };
+
+  /**
+   * カウンター結果タップ時の処理
+   * - 「未展開(即サレ)」を選んだ場合、自動的に判断区分を「早期見切り(即サレ)」、勝敗を「Lose」に連動
+   */
+  const handleSelectCounterAction = (act: string) => {
+    setCounterAction(act);
+    if (act === '未展開(即サレ)') {
+      setPlayDecision('早期見切り(即サレ)');
+      setResult('Lose');
+      if (WIN_FACTORS.includes(gameFactor)) {
         setGameFactor('');
       }
     }
@@ -1017,17 +1035,20 @@ export const App: React.FC = () => {
               <label className="block text-xs font-bold text-slate-200 mb-2">
                 カウンター結果（誘発・妨害の乗り越え状況）
               </label>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {master.カウンター結果.map((act) => {
                   const active = counterAction === act;
+                  const isSurrender = act === '未展開(即サレ)';
                   return (
                     <button
                       key={act}
                       type="button"
-                      onClick={() => setCounterAction(act)}
-                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all active:scale-95 truncate ${
+                      onClick={() => handleSelectCounterAction(act)}
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all active:scale-95 text-center truncate ${
                         active
-                          ? 'bg-sky-600 border-sky-300 text-white shadow-md shadow-sky-950/60'
+                          ? isSurrender
+                            ? 'bg-rose-600/90 border-rose-300 text-white shadow-md shadow-rose-950/60'
+                            : 'bg-sky-600 border-sky-300 text-white shadow-md shadow-sky-950/60'
                           : 'bg-slate-800/80 border-slate-700/80 text-slate-300 hover:bg-slate-800'
                       }`}
                     >

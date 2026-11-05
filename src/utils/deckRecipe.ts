@@ -287,14 +287,48 @@ export function extractDeckInteractionsForBuilder(deck?: RegisteredDeck): {
   return { stapleDeckCards, themeDeckCards };
 }
 
-/**
- * アップロードされたデッキリストJPGをCanvasで適度な解像度（長辺1400px）とサムネイル（長辺360px）に変換する
- */
-export async function processUploadedDeckImage(file: File): Promise<{
+export interface ProcessedDeckFileResult {
   ocrBase64: string;
   mimeType: string;
-  previewDataUrl: string;
-}> {
+  previewDataUrl?: string;
+  fileName: string;
+  isPdf: boolean;
+}
+
+/**
+ * アップロードされたデッキリスト（JPG画像またはPDF）を処理する
+ * - JPG画像: Canvasで適度な解像度（長辺1400px）とサムネイル（長辺360px）にリサイズ
+ * - PDF: バイナリを直接Base64化（Gemini 2.5 Flash VisionがネイティブでPDFをマルチモーダル処理可能）
+ */
+export async function processUploadedDeckFile(file: File): Promise<ProcessedDeckFileResult> {
+  const isPdf =
+    file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  // PDFファイルの場合：Canvasでのリサイズをスキップし、そのままBase64化
+  if (isPdf) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const resultStr = reader.result as string;
+          const base64 = resultStr.includes(',') ? resultStr.split(',')[1] : resultStr;
+          resolve({
+            ocrBase64: base64,
+            mimeType: 'application/pdf',
+            previewDataUrl: undefined,
+            fileName: file.name,
+            isPdf: true,
+          });
+        } catch (e) {
+          reject(e);
+        }
+      };
+      reader.onerror = () => reject(new Error('PDFファイルの読み込みに失敗しました'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // 画像ファイル（JPG/PNG等）の場合：Canvasで軽量化＆サムネイル生成
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -324,6 +358,8 @@ export async function processUploadedDeckImage(file: File): Promise<{
             ocrBase64,
             mimeType: 'image/jpeg',
             previewDataUrl,
+            fileName: file.name,
+            isPdf: false,
           });
         } catch (e) {
           reject(e);
@@ -336,3 +372,6 @@ export async function processUploadedDeckImage(file: File): Promise<{
     reader.readAsDataURL(file);
   });
 }
+
+/** 既存コードとの後方互換用エイリアス */
+export const processUploadedDeckImage = processUploadedDeckFile;

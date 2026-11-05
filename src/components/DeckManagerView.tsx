@@ -10,7 +10,7 @@ import {
   buildDeckRecipeData,
   formatMultiLineRecipeText,
   parseMultiLineRecipeText,
-  processUploadedDeckImage,
+  processUploadedDeckFile,
   extractDeckInteractionsForBuilder,
 } from '../utils/deckRecipe';
 import { parseDeckImageWithAI, syncDecksToSpreadsheet } from '../api';
@@ -68,6 +68,7 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
   const [editVersionNote, setEditVersionNote] = useState<string>('');
   const [editCards, setEditCards] = useState<DeckCardEntry[]>([]);
   const [editPreviewImage, setEditPreviewImage] = useState<string>('');
+  const [editPreviewFileName, setEditPreviewFileName] = useState<string>('');
   const [isBulkTextMode, setIsBulkTextMode] = useState<boolean>(false);
   const [bulkText, setBulkText] = useState<string>('');
 
@@ -76,7 +77,7 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
   const [newCardCount, setNewCardCount] = useState<number>(3);
   const [newCardCat, setNewCardCat] = useState<DeckCardCategory>('monster');
 
-  // JPG画像AI解析中のローディング・ステータスメッセージ
+  // JPG/PDFファイルAI解析中のローディング・ステータスメッセージ
   const [isParsingImage, setIsParsingImage] = useState<boolean>(false);
   const [statusToast, setStatusToast] = useState<string | null>(null);
   const [expandedDeckId, setExpandedDeckId] = useState<string | null>('deck-orcust-1');
@@ -96,6 +97,7 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
     const initialCards = deck.recipe?.cards ? [...deck.recipe.cards] : [];
     setEditCards(initialCards);
     setEditPreviewImage(deck.imagePreviewDataUrl || '');
+    setEditPreviewFileName('');
     setBulkText(formatMultiLineRecipeText(initialCards));
     setIsBulkTextMode(false);
   };
@@ -109,38 +111,42 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
     setEditVersionNote('');
     setEditCards([]);
     setEditPreviewImage('');
+    setEditPreviewFileName('');
     setBulkText(formatMultiLineRecipeText([]));
     setIsBulkTextMode(false);
   };
 
   /**
-   * ニューロンのデッキリストJPGファイルが選択されたときのAI読み取り処理
+   * ニューロンのデッキリストファイル（JPG/PNG/PDF）が選択されたときのAI読み取り処理
    */
-  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDeckFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsParsingImage(true);
     try {
-      const { ocrBase64, mimeType, previewDataUrl } = await processUploadedDeckImage(file);
-      setEditPreviewImage(previewDataUrl);
+      const { ocrBase64, mimeType, previewDataUrl, isPdf, fileName } =
+        await processUploadedDeckFile(file);
+      setEditPreviewImage(previewDataUrl || '');
+      setEditPreviewFileName(isPdf ? fileName : '');
 
       const { recipe, isMock } = await parseDeckImageWithAI(gasUrl, ocrBase64, mimeType);
       setEditCards(recipe.cards);
       setBulkText(formatMultiLineRecipeText(recipe.cards));
 
+      const fileTypeLabel = isPdf ? 'PDF' : 'JPG';
       if (isMock) {
         showToast(
-          `📸 ニューロンJPGから メイン${recipe.mainCount}枚 / EX${recipe.extraCount}枚 を抽出しました！（枚数の微調整も可能です）`
+          `📄 ニューロン${fileTypeLabel}から メイン${recipe.mainCount}枚 / EX${recipe.extraCount}枚 を抽出しました！（枚数の微調整も可能です）`
         );
       } else {
         showToast(
-          `✨ Gemini VisionでJPGを解析完了！メイン${recipe.mainCount}枚 / EX${recipe.extraCount}枚を構造化しました`
+          `✨ Gemini Visionで${fileTypeLabel}を解析完了！メイン${recipe.mainCount}枚 / EX${recipe.extraCount}枚を構造化しました`
         );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '画像解析エラー';
-      showToast(`⚠️ 画像の読み取りに失敗しました: ${msg}`);
+      const msg = err instanceof Error ? err.message : 'ファイル解析エラー';
+      showToast(`⚠️ ファイルの読み取りに失敗しました: ${msg}`);
     } finally {
       setIsParsingImage(false);
       e.target.value = '';
@@ -261,10 +267,10 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
         <div className="flex items-start justify-between gap-2">
           <div>
             <h2 className="text-sm font-extrabold text-white">
-              💼 デッキレシピ管理（ニューロンJPG ➔ DB構造化）
+              💼 デッキレシピ管理（ニューロンJPG / PDF ➔ DB構造化）
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-              遊戯王ニューロンのデッキリストJPGから採用カードをテキスト化し、スプレッドシート（『デッキレシピ』シート＋『対戦ログ』列）と自軍妨害候補へ自動連動します
+              遊戯王ニューロンのデッキリスト（JPG画像またはPDF）から採用カードを自動抽出し、スプレッドシート（『デッキレシピ』シート＋『対戦ログ』列）と自軍妨害候補へ連動します
             </p>
           </div>
           <button
@@ -307,7 +313,7 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
           <div className="flex items-center justify-between">
             <div className="text-xs font-extrabold text-amber-300">
               {editingId === 'NEW'
-                ? '✨ 新規デッキ＆ニューロンJPGレシピ登録'
+                ? '✨ 新規デッキ＆ニューロン（JPG/PDF）レシピ登録'
                 : '✏️ デッキレシピ（採用カード）の編集'}
             </div>
             <button
@@ -347,32 +353,40 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
             </div>
           </div>
 
-          {/* ★ 遊戯王ニューロン デッキリストJPGアップロード枠 */}
+          {/* ★ 遊戯王ニューロン デッキリストJPG/PDFアップロード枠 */}
           <div className="rounded-xl bg-slate-950/90 border border-dashed border-sky-500/60 p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="text-xs font-extrabold text-sky-300 flex items-center gap-1.5">
                   <span>📸</span>
-                  <span>遊戯王ニューロンのデッキリストJPGを読み込む</span>
+                  <span>遊戯王ニューロンのデッキリストJPG / PDFを読み込む</span>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-0.5">
-                  ニューロン出力の白い表形式JPGを選ぶと、モンスター/魔法/罠/EXのカード名と枚数を自動抽出します
+                  ニューロン出力の表形式ファイル（JPG画像またはPDF）を選ぶと、モンスター/魔法/罠/EXのカード名と枚数を自動抽出します
                 </p>
               </div>
-              {editPreviewImage && (
+              {editPreviewImage ? (
                 <img
                   src={editPreviewImage}
-                  alt="ニューロンJPGプレビュー"
+                  alt="デッキリストプレビュー"
                   className="w-12 h-16 object-cover rounded border border-slate-700 shrink-0"
                 />
-              )}
+              ) : editPreviewFileName ? (
+                <div className="w-14 h-16 rounded-lg bg-rose-950/80 border border-rose-500/50 flex flex-col items-center justify-center p-1 shrink-0 text-center">
+                  <span className="text-lg">📄</span>
+                  <span className="text-[9px] font-black text-rose-300">PDF読込</span>
+                  <span className="text-[8px] text-slate-300 truncate w-12" title={editPreviewFileName}>
+                    {editPreviewFileName}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
             <label className="block">
               <input
                 type="file"
-                accept="image/*"
-                onChange={handleImageFileSelect}
+                accept="image/*,application/pdf,.pdf"
+                onChange={handleDeckFileSelect}
                 disabled={isParsingImage}
                 className="hidden"
               />
@@ -380,12 +394,12 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
                 {isParsingImage ? (
                   <>
                     <span className="animate-spin">⏳</span>
-                    <span>ニューロンJPGからカード名と枚数をAI抽出中...</span>
+                    <span>ニューロンファイルからカード名と枚数をAI抽出中...</span>
                   </>
                 ) : (
                   <>
                     <span>📁</span>
-                    <span>デッキリストJPG画像を選択して自動読み取り</span>
+                    <span>デッキリストファイル（JPGまたはPDF）を選択して自動読み取り</span>
                   </>
                 )}
               </span>
@@ -598,7 +612,7 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
                     onClick={() => startEdit(deck)}
                     className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-amber-300 border border-slate-700"
                   >
-                    📸 JPG読込・編集
+                    📸 JPG/PDF読込・編集
                   </button>
                   {decks.length > 1 && (
                     <button
@@ -709,14 +723,14 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
               ) : (
                 <div className="rounded-xl bg-slate-950/60 border border-dashed border-slate-800 p-2.5 flex items-center justify-between">
                   <span className="text-[11px] text-slate-400">
-                    まだデッキリストJPGが登録されていません
+                    まだデッキレシピ（JPG/PDF）が登録されていません
                   </span>
                   <button
                     type="button"
                     onClick={() => startEdit(deck)}
                     className="text-[11px] font-bold text-sky-300 hover:text-sky-200 underline"
                   >
-                    ＋ ニューロンJPGを読み込む
+                    ＋ ニューロンJPG/PDFを読み込む
                   </button>
                 </div>
               )}
