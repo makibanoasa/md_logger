@@ -401,7 +401,7 @@ export const DeckManagerView: React.FC<DeckManagerViewProps> = ({
             </label>
 
             <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400">
-              <span>※「⚙️ API設定」に無料のGemini APIキーを登録すると解析が有効化されます</span>
+              <span>※GASのスクリプトプロパティに GEMINI_API_KEY を登録すると安全に自動解析されます</span>
               <button
                 type="button"
                 onClick={() => {

@@ -177,20 +177,6 @@ export function saveGasUrl(url: string): void {
 }
 
 /**
- * 保存されている Gemini API キーを取得
- */
-export function getSavedGeminiApiKey(): string {
-  return localStorage.getItem(STORAGE_KEYS.GEMINI_API_KEY)?.trim() || '';
-}
-
-/**
- * Gemini API キーを保存
- */
-export function saveGeminiApiKey(key: string): void {
-  localStorage.setItem(STORAGE_KEYS.GEMINI_API_KEY, key.trim());
-}
-
-/**
  * ローカルに保存されたモックステータスを取得（未保存時は初期モック値）
  */
 export function getLocalMockStatus(): CurrentStatus {
@@ -561,83 +547,12 @@ export async function postMatchLog(
 }
 
 /**
- * ブラウザから直接 Google Gemini 2.5 Flash Vision を呼び出して
- * デッキリストファイル（画像またはPDF）からカード名と枚数を解析する
- */
-async function parseDeckFileDirectlyWithGemini(
-  apiKey: string,
-  imageBase64: string,
-  mimeType: string
-): Promise<DeckCardEntry[]> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-    apiKey
-  )}`;
-
-  const prompt = [
-    '添付された遊戯王ニューロン（公式カードデータベース）のデッキレシピシート（画像またはPDF）から、',
-    '「モンスターカード」「魔法カード」「罠カード」「エクストラデッキ」に記載されている全てのカード名と枚数を正確に読み取ってください。',
-    '以下のJSON配列フォーマットのみを出力してください：',
-    '[{"name": "カード名", "count": 枚数(数値), "category": "monster" | "spell" | "trap" | "extra"}]',
-  ].join('\n');
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            {
-              inline_data: {
-                mime_type: mimeType || 'image/jpeg',
-                data: imageBase64,
-              },
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    let errMsg = `Gemini APIエラー (HTTP ${res.status})`;
-    try {
-      const errJson = JSON.parse(errText);
-      if (errJson.error?.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch {
-      // ignore
-    }
-    throw new Error(errMsg);
-  }
-
-  const json = await res.json();
-  const rawText =
-    json.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-  const parsed = JSON.parse(rawText) as DeckCardEntry[];
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error('画像からカード名が検出できませんでした。より鮮明な画像またはPDFをお試しください。');
-  }
-  return parsed;
-}
-
-/**
- * 遊戯王ニューロンのデッキリスト（JPG画像またはPDF）をAI (Gemini 2.5 Flash Vision) で解析し、
+ * 遊戯王ニューロンのデッキリスト（JPG画像またはPDF）をGAS経由でGemini Vision解析し、
  * 構造化された DeckRecipeData (モンスター/魔法/罠/EXのカード名と枚数) に変換する
  * 
- * 優先順位:
- * 1. クライアント側の Gemini API キーで直接解析（最速・最高画質・GASサイズ制限なし）
- * 2. GAS 経由での解析（GAS側にAPIキーが設定されている場合）
- * 3. どちらも未設定または失敗した場合は、勝手に固定サンプルを返さず明確なエラーを報告する
+ * セキュリティ方針:
+ * - Gemini APIキー等の秘匿情報はブラウザに保持せず、GAS側のスクリプトプロパティ `GEMINI_API_KEY` で安全に一元管理
+ * - 失敗時は勝手に固定モック（オルフェゴール）を返さず、GASから返却されたエラーメッセージをそのまま画面に通知
  */
 export async function parseDeckImageWithAI(
   gasUrl: string,
@@ -647,69 +562,48 @@ export async function parseDeckImageWithAI(
   recipe: DeckRecipeData;
   isMock: boolean;
 }> {
-  const localApiKey = getSavedGeminiApiKey();
-
-  // ① クライアント側に Gemini API キーが設定されている場合は直接呼び出し（CORS対応で最速）
-  if (localApiKey) {
-    try {
-      const cards = await parseDeckFileDirectlyWithGemini(localApiKey, imageBase64, mimeType);
-      return {
-        recipe: buildDeckRecipeData(cards),
-        isMock: false,
-      };
-    } catch (err) {
-      console.error('クライアント直接のGemini解析に失敗:', err);
-      // GAS設定がある場合はGASにフォールバック、なければエラーを投げる
-      if (!gasUrl.trim()) {
-        throw err;
-      }
-    }
-  }
-
-  // ② GAS URLが設定されている場合はバックエンドの Gemini Vision OCR (action: 'parse_deck_image') を呼び出す
   const trimmedUrl = gasUrl.trim();
-  if (trimmedUrl) {
-    try {
-      const res = await fetch(trimmedUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({
-          action: 'parse_deck_image',
-          imageBase64,
-          mimeType,
-          geminiApiKey: localApiKey || undefined,
-        }),
-        redirect: 'follow',
-      });
 
-      if (res.ok) {
-        const json = (await res.json()) as {
-          status: string;
-          cards?: DeckCardEntry[];
-          message?: string;
-        };
-        if (json.status === 'success' && Array.isArray(json.cards) && json.cards.length > 0) {
-          return {
-            recipe: buildDeckRecipeData(json.cards),
-            isMock: false,
-          };
-        } else if (json.status === 'error') {
-          throw new Error(json.message || 'GAS側のAI解析でエラーが発生しました');
-        }
-      } else {
-        throw new Error(`GAS通信エラー (HTTP ${res.status})`);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'GAS通信エラー';
-      throw new Error(`GAS経由の解析に失敗しました: ${msg}`);
-    }
+  if (!trimmedUrl) {
+    throw new Error(
+      'GAS WebアプリURLが設定されていません。右上の「⚙️ API設定」からスプレッドシートのURLを設定してください。'
+    );
   }
 
-  // ③ APIキーもGASも未設定の場合、オルフェゴールを勝手に返さず明確に案内する
+  const res = await fetch(trimmedUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    body: JSON.stringify({
+      action: 'parse_deck_image',
+      imageBase64,
+      mimeType,
+    }),
+    redirect: 'follow',
+  });
+
+  if (!res.ok) {
+    throw new Error(`GAS通信エラー (HTTP ${res.status})`);
+  }
+
+  const json = (await res.json()) as {
+    status: string;
+    cards?: DeckCardEntry[];
+    message?: string;
+  };
+
+  if (json.status === 'success' && Array.isArray(json.cards) && json.cards.length > 0) {
+    return {
+      recipe: buildDeckRecipeData(json.cards),
+      isMock: false,
+    };
+  }
+
+  // GAS側でエラーが返却された場合
   throw new Error(
-    'Gemini APIキーが未設定です。右上の「⚙️ API設定」から無料の Gemini API キーを登録すると、JPG/PDFの自動読み取りが有効になります（※テキスト一括編集による手動入力はそのまま利用可能です）。'
+    json.message ||
+      'デッキファイルの解析に失敗しました。GASのスクリプトプロパティに GEMINI_API_KEY が正しく設定されているか確認してください。'
   );
 }
 

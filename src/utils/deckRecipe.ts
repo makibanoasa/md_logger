@@ -334,7 +334,7 @@ export async function processUploadedDeckFile(file: File): Promise<ProcessedDeck
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        // 1. OCR送信用（長辺1400px・JPEG品質0.85で文字の鮮明さを維持しつつ軽量化）
+        // 1. OCR送信用（長辺1200px・JPEG品質0.75で文字の鮮明さを維持しつつGAS通信を高速・軽量化）
         const makeResizedDataUrl = (maxDim: number, quality: number) => {
           const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
           const w = Math.round(img.width * scale);
@@ -351,8 +351,8 @@ export async function processUploadedDeckFile(file: File): Promise<ProcessedDeck
         };
 
         try {
-          const ocrDataUrl = makeResizedDataUrl(1400, 0.85);
-          const previewDataUrl = makeResizedDataUrl(360, 0.7);
+          const ocrDataUrl = makeResizedDataUrl(1200, 0.75);
+          const previewDataUrl = makeResizedDataUrl(360, 0.65);
           const ocrBase64 = ocrDataUrl.split(',')[1] || '';
           resolve({
             ocrBase64,

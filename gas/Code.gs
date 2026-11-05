@@ -86,11 +86,7 @@ function doPost(e) {
 
     // ① ニューロン出力JPG/PDF画像のAI読み取りリクエスト
     if (payload.action === 'parse_deck_image') {
-      const cards = parseNeuronDeckImageWithGemini_(
-        payload.imageBase64,
-        payload.mimeType,
-        payload.geminiApiKey
-      );
+      const cards = parseNeuronDeckImageWithGemini_(payload.imageBase64, payload.mimeType);
       return createJsonResponse_({
         status: 'success',
         cards: cards,
@@ -209,13 +205,16 @@ function ensureExtendedLogHeaders_(logSheet) {
 }
 
 /**
- * 遊戯王ニューロン出力のデッキリストJPG画像を Gemini 2.5 Flash Vision で解析し、
+ * 遊戯王ニューロン出力のデッキリスト（画像またはPDF）を Gemini 2.5 Flash Vision で解析し、
  * [{ name: "エフェクト・ヴェーラー", count: 3, category: "monster" }, ...] を返す
+ * 
+ * セキュリティ方針:
+ * - APIキーはGASのスクリプトプロパティ `GEMINI_API_KEY` のみで安全に保持
  */
-function parseNeuronDeckImageWithGemini_(imageBase64, mimeType, apiKeyParam) {
-  const apiKey = apiKeyParam || getGeminiApiKey_();
+function parseNeuronDeckImageWithGemini_(imageBase64, mimeType) {
+  const apiKey = getGeminiApiKey_();
   if (!apiKey) {
-    throw new Error('Gemini APIキーが設定されていません。アプリの「⚙️ API設定」またはGASスクリプトプロパティに GEMINI_API_KEY を設定してください');
+    throw new Error('GASのスクリプトプロパティに GEMINI_API_KEY が設定されていません。Apps Scriptの設定からAPIキーを登録してください');
   }
 
   const url =
@@ -256,17 +255,55 @@ function parseNeuronDeckImageWithGemini_(imageBase64, mimeType, apiKeyParam) {
     muteHttpExceptions: true,
   });
 
-  const json = JSON.parse(res.getContentText());
-  const rawText =
-    json.candidates &&
-    json.candidates[0] &&
-    json.candidates[0].content &&
-    json.candidates[0].content.parts &&
-    json.candidates[0].content.parts[0].text
-      ? json.candidates[0].content.parts[0].text
-      : '[]';
+  const statusCode = res.getResponseCode();
+  const resText = res.getContentText();
 
-  return JSON.parse(rawText);
+  let json;
+  try {
+    json = JSON.parse(resText);
+  } catch (e) {
+    throw new Error('Gemini APIレスポンス解析エラー (HTTP ' + statusCode + ')');
+  }
+
+  if (statusCode !== 200 || json.error) {
+    const errMsg = json.error && json.error.message ? json.error.message : resText;
+    throw new Error('Gemini APIエラー (HTTP ' + statusCode + '): ' + errMsg);
+  }
+
+  // candidates の parts から最終テキストを抽出（Thinkingパートが存在する場合を考慮）
+  let rawText = '';
+  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts) {
+    const parts = json.candidates[0].content.parts;
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (parts[i].text && !parts[i].thought) {
+        rawText = parts[i].text;
+        break;
+      }
+    }
+    if (!rawText && parts[0] && parts[0].text) {
+      rawText = parts[0].text;
+    }
+  }
+
+  if (!rawText) {
+    throw new Error('Gemini APIからテキストが返却されませんでした');
+  }
+
+  // マークダウンコードブロック（```json ... ```）の除去
+  rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  let cards = [];
+  try {
+    cards = JSON.parse(rawText);
+  } catch (e) {
+    throw new Error('AI出力のJSONパースに失敗しました: ' + rawText.slice(0, 100));
+  }
+
+  if (!Array.isArray(cards) || cards.length === 0) {
+    throw new Error('画像/PDFからカード名と枚数を検出できませんでした。より鮮明なファイルをお試しください。');
+  }
+
+  return cards;
 }
 
 /**

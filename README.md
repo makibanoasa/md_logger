@@ -68,17 +68,16 @@ GitHub Pages（画面）は共通ですが、**データは各自のGoogle ス�
    - **アクセスできるユーザー**: **`全員`**（※ここを「全員」にしないとスマホから書き込めません）
 4. **「デプロイ」** を押し、発行された **ウェブアプリのURL (`https://script.google.com/macros/s/.../exec`)** をコピーします。
 
-> **💡 オプション（AI伴走コメントを有効化する場合）**:  
-> Apps Script の「プロジェクトの設定（歯車アイコン）」➔「スクリプト プロパティ」に、プロパティ名 `GEMINI_API_KEY`、値に [Google AI Studio](https://aistudio.google.com/) で取得した無料APIキーを設定してください（設定しなくても定型アドバイスで正常に動作します）。
+> **🔒 セキュアなAI機能の有効化（AI伴走コメント＆デッキ画像/PDF解析）**:  
+> Apps Script の「プロジェクトの設定（歯車アイコン）」➔「スクリプト プロパティ」に、以下のプロパティを追加してください：
+> - **プロパティ名**: **`GEMINI_API_KEY`**
+> - **値**: [Google AI Studio (無料)](https://aistudio.google.com/app/apikey) で取得したAPIキー
+> ※ APIキーはGoogleのサーバー側（GAS）で安全に保護され、ブラウザ上に露出することはありません。
 
 ### STEP 5: スマホアプリの「API設定」に貼るだけ！
 1. スマホで **https://makibanoasa.github.io/md_logger/** を開きます。
-2. 右上の **「⚙️ API設定」** をタップします。
-3. コピーした **GAS WebアプリURL** を貼り付けます。
-4. **【重要】ニューロンのデッキリスト（JPG/PDF）をAIで自動読み取りする場合**:
-   - [Google AI Studio (無料)](https://aistudio.google.com/app/apikey) で「Create API Key」を押し、発行されたAPIキーを **「Google Gemini APIキー (無料)」** 欄に貼り付けます。
-   - これにより、ブラウザから直接 Gemini 2.5 Flash Vision が呼び出され、どんなデッキレシピでも100%確実にカード名と枚数を自動構造化します。
-5. **「保存して反映」** を押せば完了です！上部に **`GAS連携中`** と表示されます。
+2. 右上の **「⚙️ API設定」** をタップし、先ほどコピーしたURLを貼り付けて **「保存して反映」** を押します。
+3. 上部に緑色で **`GAS連携中`** と表示されれば完了です！ニューロンのデッキリスト（JPG/PDF）もGAS経由で安全にAI自動解析されます。
 
 ---
 
